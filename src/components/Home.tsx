@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { fetchChessCom, fetchLichess, TIME_CLASS_RU, type ImportedGame } from '../lib/importers.ts';
 import { getPref, listSaved, removeSaved, setPref, type SavedMeta } from '../lib/storage.ts';
+import { rememberMyName, updateSettings, useSettings } from '../lib/settings.ts';
 
 export const DEPTHS = [
   { value: 12, label: 'Быстро (глубина 12)' },
@@ -21,17 +22,21 @@ const SAMPLE_PGN = `[Event "Opera Game"]
 
 export function Home({
   onAnalyze,
+  onBatch,
   onOpenSaved,
   error,
 }: {
   onAnalyze: (pgn: string, depth: number, me?: string) => void;
+  onBatch: (pgns: string[], depth: number) => void;
   onOpenSaved: (id: string) => void;
   error: string | null;
 }) {
+  const settings = useSettings();
+  const depth = settings.depth;
+  const [batchSize, setBatchSize] = useState(10);
   const [source, setSource] = useState<Source>(() => getPref('source', 'chess.com') as Source);
   const [username, setUsername] = useState(() => getPref(`user:${getPref('source', 'chess.com')}`, ''));
   const [pgn, setPgn] = useState('');
-  const [depth, setDepth] = useState(() => Number(getPref('depth', '15')));
   const [games, setGames] = useState<ImportedGame[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -56,6 +61,7 @@ export function Home({
       const list = source === 'chess.com' ? await fetchChessCom(username) : await fetchLichess(username);
       setGames(list);
       if (!list.length) setFetchError('Партий не найдено');
+      else rememberMyName(username);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -63,10 +69,7 @@ export function Home({
     }
   };
 
-  const changeDepth = (d: number) => {
-    setDepth(d);
-    setPref('depth', String(d));
-  };
+  const changeDepth = (d: number) => updateSettings({ depth: d });
 
   return (
     <div className="home">
@@ -134,6 +137,22 @@ export function Home({
               </button>
             </form>
             {fetchError && <div className="error">{fetchError}</div>}
+            {games && games.length > 0 && (
+              <div className="batch-row">
+                <span>Проанализировать последние</span>
+                <select value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))}>
+                  {[5, 10, 20, 50].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <span>партий для статистики</span>
+                <button className="btn btn-primary btn-small" onClick={() => onBatch(games.slice(0, batchSize).map((g) => g.pgn), depth)}>
+                  Запустить
+                </button>
+              </div>
+            )}
             {games && games.length > 0 && (
               <ul className="game-list">
                 {games.slice(0, 60).map((g) => {

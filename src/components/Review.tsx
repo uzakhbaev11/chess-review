@@ -9,6 +9,9 @@ import { EvalGraph } from './EvalGraph.tsx';
 import { MoveList } from './MoveList.tsx';
 import { Summary } from './Summary.tsx';
 import { Coach, type RetryState } from './Coach.tsx';
+import { AiChat, AiGameReview, AiMoveExplain } from './Ai.tsx';
+import { playSound, soundForSan } from '../lib/sound.ts';
+import { BOARD_THEMES, useSettings } from '../lib/settings.ts';
 
 const KEY_CLASSES = new Set<MoveClass>(['brilliant', 'great', 'mistake', 'miss', 'blunder']);
 const AUTO_ARROW = new Set<MoveClass>(['inaccuracy', 'mistake', 'miss', 'blunder', 'good']);
@@ -16,13 +19,19 @@ const AUTO_ARROW = new Set<MoveClass>(['inaccuracy', 'mistake', 'miss', 'blunder
 export function Review({
   analysis,
   orientation: initialOrientation,
+  me,
   onBack,
+  onOpenSettings,
 }: {
   analysis: GameAnalysis;
   orientation: Color;
+  me?: Color;
   onBack: () => void;
+  onOpenSettings: () => void;
 }) {
   const { moves } = analysis;
+  const settings = useSettings();
+  const theme = BOARD_THEMES[settings.boardTheme] ?? BOARD_THEMES.green;
   const [ply, setPly] = useState(0);
   const [tab, setTab] = useState<'summary' | 'moves'>('summary');
   const [flipped, setFlipped] = useState(initialOrientation === 'b');
@@ -35,13 +44,16 @@ export function Review({
 
   const go = useCallback(
     (p: number) => {
-      setPly(Math.max(0, Math.min(moves.length, p)));
+      const next = Math.max(0, Math.min(moves.length, p));
+      if (next === ply + 1 && next > 0) playSound(soundForSan(moves[next - 1].san));
+      else if (next !== ply) playSound('move');
+      setPly(next);
       setShowBest(false);
       setRetry(null);
       setRetryFen(null);
       setTab('moves');
     },
-    [moves.length],
+    [moves, ply],
   );
 
   useEffect(() => {
@@ -107,8 +119,10 @@ export function Review({
     if (ok) {
       setRetryFen(c.fen());
       setRetry({ status: 'correct' });
+      playSound('success');
       return true;
     }
+    playSound('error');
     setRetry({ status: 'wrong' });
     return false;
   };
@@ -134,8 +148,8 @@ export function Review({
                 onPieceDrop,
                 squareRenderer,
                 animationDurationInMs: 180,
-                darkSquareStyle: { backgroundColor: 'var(--sq-dark)' },
-                lightSquareStyle: { backgroundColor: 'var(--sq-light)' },
+                darkSquareStyle: { backgroundColor: theme.dark },
+                lightSquareStyle: { backgroundColor: theme.light },
               }}
             />
           </div>
@@ -166,6 +180,7 @@ export function Review({
           <div className="panel-body">
             <EvalGraph analysis={analysis} ply={ply} onSelect={go} />
             <Summary analysis={analysis} onStart={() => go(ply || 1)} />
+            <AiGameReview analysis={analysis} me={me} onOpenSettings={onOpenSettings} />
           </div>
         ) : (
           <div className="panel-body">
@@ -185,6 +200,7 @@ export function Review({
                 setRetryFen(null);
               }}
             />
+            {move && !retry && <AiMoveExplain analysis={analysis} move={move} onOpenSettings={onOpenSettings} />}
             <button className="btn btn-primary btn-wide" onClick={() => go(ply + 1)} disabled={ply >= moves.length}>
               → Далее
             </button>
@@ -198,6 +214,7 @@ export function Review({
                 Ключевой момент →
               </button>
             </div>
+            <AiChat analysis={analysis} ply={ply} onOpenSettings={onOpenSettings} />
           </div>
         )}
 
