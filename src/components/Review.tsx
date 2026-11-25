@@ -248,7 +248,7 @@ export function Review({
             {AI_FEATURE_ENABLED && <AiGameReview analysis={analysis} me={me} onOpenSettings={onOpenSettings} />}
           </div>
         ) : (
-          <div className="panel-body">
+          <div className="panel-body analysis">
             <Coach
               analysis={analysis}
               move={move}

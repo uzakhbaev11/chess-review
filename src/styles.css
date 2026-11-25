@@ -1186,3 +1186,33 @@ a {
   background: var(--accent);
   color: #fff;
 }
+
+/* ---------- Фиксированная раскладка панели «Анализ» ---------- */
+.coach-bubble {
+  /* Облачко всегда одной высоты: длинный текст и вариант прокручиваются внутри */
+  height: 172px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+@media (min-width: 901px) {
+  .panel {
+    height: calc(100vh - 100px);
+    min-height: 560px;
+    max-height: none;
+  }
+  .panel-body.analysis {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+  }
+  .panel-body.analysis > * {
+    flex: none;
+  }
+  .panel-body.analysis > .move-list {
+    flex: 1 1 auto;
+    min-height: 100px;
+    max-height: none;
+  }
+}

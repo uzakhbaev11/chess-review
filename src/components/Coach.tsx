@@ -50,9 +50,6 @@ export function Coach({
               </span>
             </div>
           </div>
-          <div className="coach-text">
-            {idx === 0 ? 'Позиция перед ходом. Стрелка показывает лучший ход.' : 'Вариант движка. Листайте ходы стрелками ◀ ▶ или нажмите на ход.'}
-          </div>
           <div className="var-line">
             {steps.map((st, i) => (
               <button key={i} className={`var-move ${idx === i + 1 ? 'active' : ''}`} onClick={() => onVariationStep(i + 1)}>
