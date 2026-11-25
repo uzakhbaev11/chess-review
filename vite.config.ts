@@ -5,4 +5,6 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  // Воркер локальной модели использует динамические импорты — нужен формат ES
+  worker: { format: 'es' },
 });

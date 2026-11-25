@@ -1123,3 +1123,37 @@ a {
 .stat-table th:not(:first-child) {
   text-align: right;
 }
+
+.provider-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.provider {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  background: var(--card);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 10px;
+}
+.provider small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.provider.active {
+  border-color: var(--accent);
+}
+.ai-loading {
+  display: grid;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.ai-note {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 11px;
+}

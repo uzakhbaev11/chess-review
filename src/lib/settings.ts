@@ -2,7 +2,12 @@ import { useSyncExternalStore } from 'react';
 
 export type BoardTheme = 'green' | 'brown' | 'blue' | 'gray';
 
+export type AiProvider = 'local' | 'claude';
+
 export interface Settings {
+  /** 'local' — модель в браузере (WebGPU, без ключа); 'claude' — Claude API по ключу пользователя. */
+  aiProvider: AiProvider;
+  localModel: string;
   /** Ключ Anthropic API — хранится только в этом браузере. */
   apiKey: string;
   model: string;
@@ -29,6 +34,8 @@ export const BOARD_THEMES: Record<BoardTheme, { label: string; light: string; da
 
 const KEY = 'settings:v1';
 const DEFAULTS: Settings = {
+  aiProvider: 'local',
+  localModel: 'Qwen3.5-4B-q4f16_1-MLC',
   apiKey: '',
   model: 'claude-opus-5-5',
   aiEnabled: true,
@@ -93,5 +100,6 @@ export function myNameList(): string[] {
 }
 
 export function isAiReady(s: Settings = current): boolean {
-  return s.aiEnabled && s.apiKey.trim().length > 0;
+  if (!s.aiEnabled) return false;
+  return s.aiProvider === 'local' || s.apiKey.trim().length > 0;
 }

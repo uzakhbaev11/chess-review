@@ -2,10 +2,31 @@ import { useEffect, useState } from 'react';
 import { AI_MODELS, BOARD_THEMES, updateSettings, useSettings, type BoardTheme } from '../lib/settings.ts';
 import { DEPTHS } from './Home.tsx';
 import { playSound } from '../lib/sound.ts';
+import { checkWebGpu, getLocalEngine, LOCAL_MODELS, onLoadStatus, type LoadStatus } from '../lib/localAi.ts';
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
   const s = useSettings();
   const [showKey, setShowKey] = useState(false);
+  const [gpuError, setGpuError] = useState<string | null>(null);
+  const [preload, setPreload] = useState<LoadStatus>(null);
+  const [preloadDone, setPreloadDone] = useState(false);
+  const [preloadError, setPreloadError] = useState<string | null>(null);
+
+  useEffect(() => onLoadStatus(setPreload), []);
+  useEffect(() => {
+    if (s.aiProvider === 'local') void checkWebGpu().then(setGpuError);
+    setPreloadDone(false);
+  }, [s.aiProvider, s.localModel]);
+
+  const startPreload = async () => {
+    setPreloadError(null);
+    try {
+      await getLocalEngine(s.localModel);
+      setPreloadDone(true);
+    } catch (e) {
+      setPreloadError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -24,44 +45,97 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <section className="settings-section">
-          <h3>✨ ИИ-тренер (Claude)</h3>
+          <h3>✨ ИИ-тренер</h3>
           <label className="toggle">
             <input type="checkbox" checked={s.aiEnabled} onChange={(e) => updateSettings({ aiEnabled: e.target.checked })} />
             Включить ИИ-тренера
           </label>
-          <label className="field">
-            API-ключ Anthropic
-            <div className="key-row">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={s.apiKey}
-                onChange={(e) => updateSettings({ apiKey: e.target.value.trim() })}
-                placeholder="sk-ant-…"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <button className="btn btn-small" onClick={() => setShowKey((v) => !v)}>
-                {showKey ? 'Скрыть' : 'Показать'}
-              </button>
-            </div>
-          </label>
-          <p className="hint">
-            Ключ хранится только в этом браузере и отправляется напрямую в api.anthropic.com. Получить ключ:{' '}
-            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
-              console.anthropic.com
-            </a>
-            . Запросы оплачиваются с вашего аккаунта Anthropic. Не вводите ключ на чужом компьютере.
-          </p>
-          <label className="field">
-            Модель
-            <select value={s.model} onChange={(e) => updateSettings({ model: e.target.value })}>
-              {AI_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="provider-row">
+            <button
+              className={`provider ${s.aiProvider === 'local' ? 'active' : ''}`}
+              onClick={() => updateSettings({ aiProvider: 'local' })}
+            >
+              <b>💻 В браузере</b>
+              <small>Бесплатно, без ключа. Модель скачивается один раз.</small>
+            </button>
+            <button
+              className={`provider ${s.aiProvider === 'claude' ? 'active' : ''}`}
+              onClick={() => updateSettings({ aiProvider: 'claude' })}
+            >
+              <b>☁️ Claude</b>
+              <small>Умнее, нужен свой API-ключ Anthropic.</small>
+            </button>
+          </div>
+
+          {s.aiProvider === 'local' ? (
+            <>
+              <label className="field">
+                Модель
+                <select value={s.localModel} onChange={(e) => updateSettings({ localModel: e.target.value })}>
+                  {LOCAL_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="hint">
+                Модель работает прямо в браузере на видеокарте (WebGPU): нужен Chrome или Edge на компьютере. При первом использовании она
+                скачивается и сохраняется в кэше браузера, потом открывается за секунды. Небольшие модели слабее Claude и иногда ошибаются в
+                шахматных деталях.
+              </p>
+              {gpuError && <div className="error">{gpuError}</div>}
+              {preload ? (
+                <div className="ai-loading">
+                  <div>{preload.text}</div>
+                  <div className="progress">
+                    <div className="progress-fill" style={{ width: `${Math.round(preload.progress * 100)}%` }} />
+                  </div>
+                </div>
+              ) : (
+                <button className="btn btn-small" onClick={startPreload} disabled={!!gpuError}>
+                  {preloadDone ? '✓ Модель загружена' : '⬇ Скачать модель сейчас'}
+                </button>
+              )}
+              {preloadError && <div className="error">{preloadError}</div>}
+            </>
+          ) : (
+            <>
+              <label className="field">
+                API-ключ Anthropic
+                <div className="key-row">
+                  <input
+                    type={showKey ? 'text' : 'password'}
+                    value={s.apiKey}
+                    onChange={(e) => updateSettings({ apiKey: e.target.value.trim() })}
+                    placeholder="sk-ant-…"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button className="btn btn-small" onClick={() => setShowKey((v) => !v)}>
+                    {showKey ? 'Скрыть' : 'Показать'}
+                  </button>
+                </div>
+              </label>
+              <p className="hint">
+                Ключ хранится только в этом браузере и отправляется напрямую в api.anthropic.com. Получить ключ:{' '}
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">
+                  console.anthropic.com
+                </a>
+                . Запросы оплачиваются с вашего аккаунта Anthropic. Не вводите ключ на чужом компьютере.
+              </p>
+              <label className="field">
+                Модель
+                <select value={s.model} onChange={(e) => updateSettings({ model: e.target.value })}>
+                  {AI_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
         </section>
 
         <section className="settings-section">
