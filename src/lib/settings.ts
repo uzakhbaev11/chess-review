@@ -2,6 +2,9 @@ import { useSyncExternalStore } from 'react';
 
 export type BoardTheme = 'green' | 'brown' | 'blue' | 'gray';
 
+/** ИИ-тренер временно выключен: код на месте, но интерфейс его не показывает и ничего не загружает. */
+export const AI_FEATURE_ENABLED = false;
+
 export type AiProvider = 'local' | 'claude';
 
 export interface Settings {

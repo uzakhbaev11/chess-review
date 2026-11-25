@@ -1157,3 +1157,32 @@ a {
   font-weight: 500;
   font-size: 11px;
 }
+
+/* Разыгрываемый вариант */
+.btn-best {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 0 var(--accent-dark);
+}
+.var-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.var-move {
+  background: var(--bg-2);
+  border: 0;
+  border-radius: 4px;
+  padding: 3px 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.var-move:hover {
+  color: var(--text);
+}
+.var-move.active {
+  background: var(--accent);
+  color: #fff;
+}

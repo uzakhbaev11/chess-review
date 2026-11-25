@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AI_MODELS, BOARD_THEMES, updateSettings, useSettings, type BoardTheme } from '../lib/settings.ts';
+import { AI_FEATURE_ENABLED, AI_MODELS, BOARD_THEMES, updateSettings, useSettings, type BoardTheme } from '../lib/settings.ts';
 import { DEPTHS } from './Home.tsx';
 import { playSound } from '../lib/sound.ts';
 import { checkWebGpu, getLocalEngine, LOCAL_MODELS, onLoadStatus, type LoadStatus } from '../lib/localAi.ts';
@@ -14,7 +14,7 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => onLoadStatus(setPreload), []);
   useEffect(() => {
-    if (s.aiProvider === 'local') void checkWebGpu().then(setGpuError);
+    if (AI_FEATURE_ENABLED && s.aiProvider === 'local') void checkWebGpu().then(setGpuError);
     setPreloadDone(false);
   }, [s.aiProvider, s.localModel]);
 
@@ -44,6 +44,8 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
+        {AI_FEATURE_ENABLED && (
+          <>
         <section className="settings-section">
           <h3>✨ ИИ-тренер</h3>
           <label className="toggle">
@@ -137,6 +139,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </>
           )}
         </section>
+
+          </>
+        )}
 
         <section className="settings-section">
           <h3>♟ Анализ</h3>

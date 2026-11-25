@@ -11,7 +11,33 @@ import { Summary } from './Summary.tsx';
 import { Coach, type RetryState } from './Coach.tsx';
 import { AiChat, AiGameReview, AiMoveExplain } from './Ai.tsx';
 import { playSound, soundForSan } from '../lib/sound.ts';
-import { BOARD_THEMES, useSettings } from '../lib/settings.ts';
+import { AI_FEATURE_ENABLED, BOARD_THEMES, useSettings } from '../lib/settings.ts';
+
+/** Вариант движка, разыгрываемый на доске (кнопка «Лучший»). */
+export interface VariationStep {
+  san: string;
+  from: string;
+  to: string;
+  fen: string;
+  label: string;
+}
+
+function buildVariation(fen: string, sans: string[]): VariationStep[] {
+  const c = new Chess(fen);
+  const steps: VariationStep[] = [];
+  for (const san of sans) {
+    const before = c.fen().split(' ');
+    let mv;
+    try {
+      mv = c.move(san);
+    } catch {
+      break;
+    }
+    const num = before[5];
+    steps.push({ san: mv.san, from: mv.from, to: mv.to, fen: c.fen(), label: before[1] === 'w' ? `${num}. ${mv.san}` : `${num}… ${mv.san}` });
+  }
+  return steps;
+}
 
 const KEY_CLASSES = new Set<MoveClass>(['brilliant', 'great', 'mistake', 'miss', 'blunder']);
 const AUTO_ARROW = new Set<MoveClass>(['inaccuracy', 'mistake', 'miss', 'blunder', 'good']);
@@ -35,11 +61,22 @@ export function Review({
   const [ply, setPly] = useState(0);
   const [tab, setTab] = useState<'summary' | 'moves'>('summary');
   const [flipped, setFlipped] = useState(initialOrientation === 'b');
-  const [showBest, setShowBest] = useState(false);
+  /** Шаг в разыгрываемом варианте: null — вариант не показан, 0 — позиция до хода, 1..N — после N ходов. */
+  const [varIdx, setVarIdx] = useState<number | null>(null);
   const [retry, setRetry] = useState<RetryState | null>(null);
   const [retryFen, setRetryFen] = useState<string | null>(null);
 
   const move = ply > 0 ? moves[ply - 1] : null;
+  const variation = useMemo(() => (move ? buildVariation(move.fenBefore, move.bestLine) : []), [move]);
+  const inVariation = varIdx !== null && variation.length > 0;
+
+  const stepVariation = (i: number) => {
+    const next = Math.max(0, Math.min(variation.length, i));
+    if (next === varIdx) return;
+    if (next > 0) playSound(soundForSan(variation[next - 1].san));
+    else playSound('move');
+    setVarIdx(next);
+  };
   const keyPlies = useMemo(() => moves.filter((m) => KEY_CLASSES.has(m.cls)).map((m) => m.ply), [moves]);
 
   const go = useCallback(
@@ -48,7 +85,7 @@ export function Review({
       if (next === ply + 1 && next > 0) playSound(soundForSan(moves[next - 1].san));
       else if (next !== ply) playSound('move');
       setPly(next);
-      setShowBest(false);
+      setVarIdx(null);
       setRetry(null);
       setRetryFen(null);
       setTab('moves');
@@ -59,7 +96,10 @@ export function Review({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return;
-      if (e.key === 'ArrowLeft') go(ply - 1);
+      if (inVariation && e.key === 'ArrowLeft') stepVariation(varIdx! - 1);
+      else if (inVariation && e.key === 'ArrowRight') stepVariation(varIdx! + 1);
+      else if (inVariation && e.key === 'Escape') setVarIdx(null);
+      else if (e.key === 'ArrowLeft') go(ply - 1);
       else if (e.key === 'ArrowRight') go(ply + 1);
       else if (e.key === 'Home') go(0);
       else if (e.key === 'End') go(moves.length);
@@ -69,11 +109,20 @@ export function Review({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, ply, moves.length]);
+  });
 
   // --- Доска
-  const fen = retry ? (retryFen ?? move!.fenBefore) : move ? move.fenAfter : analysis.startFen;
-  const score = move ? move.scoreAfter : analysis.startScore;
+  const prevScore = ply > 1 ? moves[ply - 2].scoreAfter : analysis.startScore;
+  const varStep = inVariation && varIdx! > 0 ? variation[varIdx! - 1] : null;
+  const fen = retry
+    ? (retryFen ?? move!.fenBefore)
+    : inVariation
+      ? (varStep?.fen ?? move!.fenBefore)
+      : move
+        ? move.fenAfter
+        : analysis.startFen;
+  // В варианте показываем оценку лучшей игры (оценку позиции до ошибки)
+  const score = inVariation ? prevScore : move ? move.scoreAfter : analysis.startScore;
 
   const arrows = useMemo(() => {
     if (!move || !move.bestUci || retry) {
@@ -81,13 +130,24 @@ export function Review({
         return [{ startSquare: move.bestUci.slice(0, 2), endSquare: move.bestUci.slice(2, 4), color: 'rgba(129,182,76,.85)' }];
       return [];
     }
+    if (inVariation) {
+      // На позиции до хода — стрелка следующего хода варианта
+      const nextStep = variation[varIdx!];
+      return varIdx === 0 && nextStep
+        ? [{ startSquare: nextStep.from, endSquare: nextStep.to, color: 'rgba(129,182,76,.85)' }]
+        : [];
+    }
     if (move.bestUci === move.uci) return [];
-    if (!showBest && !AUTO_ARROW.has(move.cls)) return [];
+    if (!AUTO_ARROW.has(move.cls)) return [];
     return [{ startSquare: move.bestUci.slice(0, 2), endSquare: move.bestUci.slice(2, 4), color: 'rgba(129,182,76,.85)' }];
-  }, [move, showBest, retry]);
+  }, [move, retry, inVariation, varIdx, variation]);
 
   const highlight: Record<string, React.CSSProperties> = {};
-  if (move && !retry) {
+  if (varStep) {
+    const c = varIdx === 1 ? CLASS_INFO.best.color : '#f6f669';
+    highlight[varStep.from] = { background: `${c}80` };
+    highlight[varStep.to] = { background: `${c}a8` };
+  } else if (move && !retry && !inVariation) {
     const c = CLASS_INFO[move.cls].color;
     highlight[move.from] = { background: `${c}80` };
     highlight[move.to] = { background: `${c}a8` };
@@ -96,9 +156,14 @@ export function Review({
   const squareRenderer = ({ square, children }: { square: string; children?: React.ReactNode }) => (
     <div style={{ width: '100%', height: '100%', position: 'relative', ...highlight[square] }}>
       {children}
-      {move && !retry && square === move.to && (
+      {move && !retry && !inVariation && square === move.to && (
         <div className="square-badge">
           <ClassIcon cls={move.cls} size={28} />
+        </div>
+      )}
+      {varStep && varIdx === 1 && square === varStep.to && (
+        <div className="square-badge">
+          <ClassIcon cls="best" size={28} />
         </div>
       )}
     </div>
@@ -180,7 +245,7 @@ export function Review({
           <div className="panel-body">
             <EvalGraph analysis={analysis} ply={ply} onSelect={go} />
             <Summary analysis={analysis} onStart={() => go(ply || 1)} />
-            <AiGameReview analysis={analysis} me={me} onOpenSettings={onOpenSettings} />
+            {AI_FEATURE_ENABLED && <AiGameReview analysis={analysis} me={me} onOpenSettings={onOpenSettings} />}
           </div>
         ) : (
           <div className="panel-body">
@@ -188,9 +253,15 @@ export function Review({
               analysis={analysis}
               move={move}
               retry={retry}
-              showBest={showBest}
-              onShowBest={() => setShowBest((s) => !s)}
+              variation={inVariation ? { steps: variation, idx: varIdx! } : null}
+              onShowBest={() => {
+                playSound(soundForSan(variation[0]?.san ?? ''));
+                setVarIdx(1);
+              }}
+              onVariationStep={stepVariation}
+              onExitVariation={() => setVarIdx(null)}
               onRetry={() => {
+                setVarIdx(null);
                 setRetry({ status: 'trying' });
                 setRetryFen(null);
               }}
@@ -200,7 +271,9 @@ export function Review({
                 setRetryFen(null);
               }}
             />
-            {move && !retry && <AiMoveExplain analysis={analysis} move={move} onOpenSettings={onOpenSettings} />}
+            {AI_FEATURE_ENABLED && move && !retry && (
+              <AiMoveExplain analysis={analysis} move={move} onOpenSettings={onOpenSettings} />
+            )}
             <button className="btn btn-primary btn-wide" onClick={() => go(ply + 1)} disabled={ply >= moves.length}>
               → Далее
             </button>
@@ -214,7 +287,7 @@ export function Review({
                 Ключевой момент →
               </button>
             </div>
-            <AiChat analysis={analysis} ply={ply} onOpenSettings={onOpenSettings} />
+            {AI_FEATURE_ENABLED && <AiChat analysis={analysis} ply={ply} onOpenSettings={onOpenSettings} />}
           </div>
         )}
 
@@ -222,10 +295,10 @@ export function Review({
           <button className="btn" onClick={() => go(0)} aria-label="В начало">
             ⏮
           </button>
-          <button className="btn" onClick={() => go(ply - 1)} aria-label="Назад">
+          <button className="btn" onClick={() => (inVariation ? stepVariation(varIdx! - 1) : go(ply - 1))} aria-label="Назад">
             ◀
           </button>
-          <button className="btn" onClick={() => go(ply + 1)} aria-label="Вперёд">
+          <button className="btn" onClick={() => (inVariation ? stepVariation(varIdx! + 1) : go(ply + 1))} aria-label="Вперёд">
             ▶
           </button>
           <button className="btn" onClick={() => go(moves.length)} aria-label="В конец">
